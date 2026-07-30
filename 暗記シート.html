@@ -1,0 +1,900 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>デジタル暗記シート</title>
+  
+  <!-- PDF.js ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-card: #1e293b;
+      --bg-input: #334155;
+      --accent: #6366f1;
+      --text-main: #f8fafc;
+      --text-sub: #cbd5e1;
+      --text-muted: #94a3b8;
+      --border-color: #334155;
+      --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Noto Sans JP', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    .icon {
+      width: 18px;
+      height: 18px;
+      stroke-width: 2;
+      stroke: currentColor;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex-shrink: 0;
+    }
+
+    /* ---- 上部エリア ---- */
+    .top-container-wrapper {
+      position: relative;
+      z-index: 100;
+    }
+
+    .top-container {
+      background-color: var(--bg-card);
+      border-bottom: 1px solid var(--border-color);
+      box-shadow: var(--shadow);
+      transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+      max-height: 300px;
+      overflow: hidden;
+    }
+
+    .top-container.is-collapsed {
+      max-height: 0;
+      opacity: 0;
+      border-bottom: none;
+    }
+
+    .ui-toggle-btn {
+      position: absolute;
+      bottom: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 44px;
+      height: 22px;
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-top: none;
+      border-radius: 0 0 12px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-sub);
+      box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+      z-index: 101;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+
+    .ui-toggle-btn:active {
+      background-color: var(--bg-input);
+      color: #ffffff;
+    }
+
+    .ui-toggle-btn .triangle-icon {
+      width: 0;
+      height: 0;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+      border-bottom: 7px solid currentColor;
+      transition: transform 0.3s ease;
+    }
+
+    .top-container.is-collapsed + .ui-toggle-btn .triangle-icon {
+      transform: rotate(180deg);
+    }
+
+    header {
+      padding: 8px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      min-height: 48px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 700;
+      font-size: 0.95rem;
+    }
+
+    .brand-logo {
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+    }
+
+    input[type="file"] { display: none; }
+
+    .toolbar {
+      padding: 8px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background-color: rgba(15, 23, 42, 0.6);
+      border-top: 1px solid var(--border-color);
+    }
+
+    .toolbar-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      width: 100%;
+    }
+
+    /* ---- メイン作業エリア ---- */
+    main {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background-color: var(--bg-main);
+      touch-action: none;
+    }
+
+    #viewport {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transform-origin: center center;
+      will-change: transform;
+    }
+
+    #workspace {
+      position: relative;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      border-radius: 6px;
+      overflow: hidden;
+      background-color: #ffffff;
+      display: inline-block;
+    }
+
+    #mainCanvas {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+
+    /* 暗記シート */
+    #sheet {
+      position: absolute;
+      top: 30px;
+      left: 30px;
+      width: 200px;
+      height: 120px;
+      background-color: rgba(255, 0, 0, 0.85);
+      border: 2px dashed rgba(255, 255, 255, 0.9);
+      border-radius: 6px;
+      cursor: move;
+      touch-action: none;
+      box-sizing: border-box;
+      z-index: 10;
+    }
+
+    #sheet.shape-circle { border-radius: 50%; }
+    #sheet.shape-free { border-radius: 12px; }
+
+    #sheet::after {
+      content: '';
+      position: absolute;
+      right: -10px;
+      bottom: -10px;
+      width: 24px;
+      height: 24px;
+      background-color: var(--accent);
+      border: 2px solid #ffffff;
+      border-radius: 50%;
+      cursor: nwse-resize;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+
+    #sheet.is-locked {
+      cursor: default;
+      border: 1px solid transparent;
+      pointer-events: none;
+    }
+    #sheet.is-locked::after { display: none; }
+
+    .btn {
+      background-color: var(--bg-input);
+      color: var(--text-main);
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-weight: 500;
+      border: 1px solid var(--border-color);
+      transition: all 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      touch-action: manipulation;
+      white-space: nowrap;
+    }
+
+    .btn:active { transform: scale(0.97); }
+
+    .btn-primary {
+      background-color: var(--accent);
+      color: #ffffff;
+      border-color: var(--accent);
+    }
+
+    .btn-lock {
+      background-color: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border-color: rgba(16, 185, 129, 0.3);
+    }
+
+    .btn-lock.locked {
+      background-color: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-icon-only {
+      padding: 6px;
+      min-width: 32px;
+      min-height: 32px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--bg-main);
+      padding: 4px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+    }
+
+    .control-label {
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: var(--text-sub);
+      white-space: nowrap;
+    }
+
+    select, input[type="color"], input[type="range"] {
+      background-color: var(--bg-card);
+      color: var(--text-main);
+      padding: 4px 6px;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      font-size: 0.8rem;
+      outline: none;
+    }
+
+    input[type="color"] {
+      padding: 0;
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      border: none;
+      background: none;
+    }
+
+    input[type="range"] {
+      accent-color: var(--accent);
+      width: 65px;
+    }
+
+    /* ---- 下部エリア ---- */
+    .bottom-bar {
+      position: relative;
+      z-index: 100;
+      background-color: var(--bg-card);
+      border-top: 1px solid var(--border-color);
+      padding: 8px 12px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 48px;
+      box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.3);
+    }
+
+    .empty-state {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      background: var(--bg-card);
+      padding: 32px 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+      width: 90%;
+      max-width: 360px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.5);
+      z-index: 10;
+    }
+
+    .empty-icon-wrap {
+      width: 56px;
+      height: 56px;
+      background-color: var(--bg-input);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      color: var(--accent);
+    }
+
+    .empty-state h2 { font-size: 1.05rem; font-weight: 700; margin-bottom: 8px; }
+    .empty-state p { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 20px; line-height: 1.5; }
+  </style>
+</head>
+<body>
+
+  <!-- 上部UI -->
+  <div class="top-container-wrapper">
+    <div class="top-container" id="topContainer">
+      <header>
+        <div class="brand">
+          <div class="brand-logo">
+            <svg class="icon" style="width: 22px; height: 22px;" viewBox="0 0 24 24"><path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20"/></svg>
+          </div>
+          <span>暗記シート</span>
+        </div>
+
+        <label for="fileInput" class="btn btn-primary">
+          <svg class="icon" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <span>ファイルを開く</span>
+        </label>
+        <input type="file" id="fileInput" accept="image/*,application/pdf">
+      </header>
+
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <!-- シートロック -->
+          <button class="btn btn-lock" id="lockSheetBtn">
+            <svg class="icon" id="lockIcon" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+            <span id="lockBtnText">移動可能</span>
+          </button>
+
+          <!-- 表示切替 -->
+          <button class="btn" id="toggleSheetBtn">
+            <svg class="icon" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <span>表示切替</span>
+          </button>
+
+          <!-- 拡大リセット -->
+          <button class="btn" id="resetZoomBtn">
+            <svg class="icon" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>
+            <span>位置リセット</span>
+          </button>
+
+          <!-- 画質切替 -->
+          <div class="control-group">
+            <span class="control-label">画質</span>
+            <select id="qualitySelect">
+              <option value="4.0" selected>高画質</option>
+              <option value="2.0">標準</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="toolbar-row">
+          <!-- シートカラー -->
+          <div class="control-group">
+            <span class="control-label">シート色</span>
+            <select id="colorPreset">
+              <option value="rgba(255, 0, 0, 0.85)" selected>赤シート</option>
+              <option value="rgba(0, 255, 0, 0.85)">緑シート</option>
+              <option value="rgba(0, 0, 255, 0.85)">青シート</option>
+              <option value="rgba(0, 0, 0, 0.95)">黒（暗幕）</option>
+            </select>
+            <input type="color" id="customColor" value="#ff0000">
+          </div>
+
+          <!-- シート透明度 -->
+          <div class="control-group">
+            <span class="control-label">透明度</span>
+            <input type="range" id="opacitySlider" min="20" max="100" value="85">
+          </div>
+
+          <!-- シート形状 -->
+          <div class="control-group">
+            <span class="control-label">形状</span>
+            <select id="shapeSelect">
+              <option value="rectangle" selected>長方形</option>
+              <option value="free">自由</option>
+              <option value="square">正方形</option>
+              <option value="circle">円形</option>
+              <option value="marker">マーカー</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="ui-toggle-btn" id="uiToggleBtn" aria-label="UIを折りたたむ">
+      <div class="triangle-icon"></div>
+    </button>
+  </div>
+
+  <!-- メインキャンバス -->
+  <main id="mainContainer">
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon-wrap">
+        <svg class="icon" style="width: 28px; height: 28px;" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      </div>
+      <h2>教材を開く</h2>
+      <p>PDFや画像を読み込んで、2本指でスムーズに拡大・縮小操作を行いながら暗記できます。</p>
+      <label for="fileInput" class="btn btn-primary" style="width: 100%;">
+        ファイルを選択する
+      </label>
+    </div>
+
+    <div id="viewport">
+      <div id="workspace" style="display: none;">
+        <canvas id="mainCanvas"></canvas>
+        <div id="sheet"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- 下部UI -->
+  <div class="bottom-bar">
+    <div class="control-group" id="pdfControls" style="display: none;">
+      <button class="btn btn-icon-only" id="prevPage">
+        <svg class="icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <span id="pageNumDisplay" style="font-size: 0.85rem; font-weight: 700; padding: 0 8px;">1 / 1</span>
+      <button class="btn btn-icon-only" id="nextPage">
+        <svg class="icon" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      </button>
+    </div>
+    <span id="nonPdfText" style="font-size: 0.75rem; color: var(--text-muted);">2本指で中心ズーム / 1本指で移動</span>
+  </div>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const fileInput = document.getElementById('fileInput');
+    const shapeSelect = document.getElementById('shapeSelect');
+    const qualitySelect = document.getElementById('qualitySelect');
+    
+    const mainCanvas = document.getElementById('mainCanvas');
+    const ctx = mainCanvas.getContext('2d');
+
+    // キャッシュ用オフスクリーンキャンバス（元の画像を保持）
+    const offCanvas = document.createElement('canvas');
+    const offCtx = offCanvas.getContext('2d');
+
+    const workspace = document.getElementById('workspace');
+    const viewport = document.getElementById('viewport');
+    const mainContainer = document.getElementById('mainContainer');
+    const emptyState = document.getElementById('emptyState');
+    const sheet = document.getElementById('sheet');
+    const lockSheetBtn = document.getElementById('lockSheetBtn');
+    const lockBtnText = document.getElementById('lockBtnText');
+    const lockIcon = document.getElementById('lockIcon');
+    
+    const colorPreset = document.getElementById('colorPreset');
+    const customColor = document.getElementById('customColor');
+    const toggleSheetBtn = document.getElementById('toggleSheetBtn');
+    const opacitySlider = document.getElementById('opacitySlider');
+    const resetZoomBtn = document.getElementById('resetZoomBtn');
+
+    const topContainer = document.getElementById('topContainer');
+    const uiToggleBtn = document.getElementById('uiToggleBtn');
+
+    const pdfControls = document.getElementById('pdfControls');
+    const nonPdfText = document.getElementById('nonPdfText');
+    const prevPageBtn = document.getElementById('prevPage');
+    const nextPageBtn = document.getElementById('nextPage');
+    const pageNumDisplay = document.getElementById('pageNumDisplay');
+
+    let currentFile = null;
+    let currentPdf = null;
+    let currentPageNum = 1;
+    let totalPages = 1;
+    let isSheetLocked = false;
+
+    uiToggleBtn.addEventListener('click', () => {
+      topContainer.classList.toggle('is-collapsed');
+    });
+
+    let scale = 1;
+    let panX = 0;
+    let panY = 0;
+
+    function updateTransform() {
+      viewport.style.transform = `translate3d(${panX}px, ${panY}px, 0px) scale(${scale})`;
+    }
+
+    function resetZoom() {
+      scale = 1;
+      panX = 0;
+      panY = 0;
+      updateTransform();
+    }
+
+    resetZoomBtn.addEventListener('click', resetZoom);
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      currentFile = file;
+      emptyState.style.display = 'none';
+      workspace.style.display = 'inline-block';
+      resetZoom();
+      loadCurrentFile();
+    });
+
+    qualitySelect.addEventListener('change', () => {
+      if (currentFile) loadCurrentFile();
+    });
+
+    opacitySlider.addEventListener('input', (e) => {
+      sheet.style.opacity = e.target.value / 100;
+    });
+
+    // シートが重ね合わされた領域の「赤字」をリアルタイムで直接【白】に塗りつぶす関数
+    function applySheetEraser() {
+      if (!offCanvas.width || sheet.style.display === 'none') return;
+
+      // 1. 原本画像（offCanvas）からメインキャンバスに復元
+      ctx.drawImage(offCanvas, 0, 0);
+
+      // 2. シートの座標を取得（キャンバスの解像度スケールに変換）
+      const renderScale = parseFloat(qualitySelect.value);
+      const sheetX = Math.round(sheet.offsetLeft * renderScale);
+      const sheetY = Math.round(sheet.offsetTop * renderScale);
+      const sheetW = Math.round(sheet.clientWidth * renderScale);
+      const sheetH = Math.round(sheet.clientHeight * renderScale);
+
+      if (sheetW <= 0 || sheetH <= 0) return;
+
+      // 3. シートの範囲内だけピクセルデータを取得
+      const imgData = ctx.getImageData(sheetX, sheetY, sheetW, sheetH);
+      const data = imgData.data;
+
+      // 4. 赤系統の要素を検出して完全に「白(#FFFFFF)」に塗りつぶす
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+
+        // 赤色判定（赤色が緑・青より明確に強い箇所＝赤文字）
+        if (r > 80 && r > g * 1.25 && r > b * 1.25) {
+          data[i] = 255;     // R
+          data[i + 1] = 255; // G
+          data[i + 2] = 255; // B
+        }
+      }
+
+      // 5. 書き換えたピクセルをキャンバスに反映
+      ctx.putImageData(imgData, sheetX, sheetY);
+    }
+
+    function loadCurrentFile() {
+      if (!currentFile) return;
+      if (currentFile.type === 'application/pdf') {
+        loadPDF(currentFile);
+      } else if (currentFile.type.startsWith('image/')) {
+        loadImage(currentFile);
+      }
+    }
+
+    function loadImage(file) {
+      pdfControls.style.display = 'none';
+      nonPdfText.style.display = 'block';
+      currentPdf = null;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const maxContainerWidth = mainContainer.clientWidth - 24;
+          const baseWidth = Math.min(img.width, maxContainerWidth);
+          const baseHeight = img.height * (baseWidth / img.width);
+          const renderScale = parseFloat(qualitySelect.value);
+
+          mainCanvas.width = baseWidth * renderScale;
+          mainCanvas.height = baseHeight * renderScale;
+          offCanvas.width = mainCanvas.width;
+          offCanvas.height = mainCanvas.height;
+
+          workspace.style.width = `${baseWidth}px`;
+          workspace.style.height = `${baseHeight}px`;
+
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, mainCanvas.width, mainCanvas.height);
+
+          // 原本をオフスクリーンキャンバスに保存
+          offCtx.drawImage(mainCanvas, 0, 0);
+
+          applySheetEraser();
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function loadPDF(file) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const typedarray = new Uint8Array(event.target.result);
+        pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+          currentPdf = pdf;
+          totalPages = pdf.numPages;
+          pdfControls.style.display = 'inline-flex';
+          nonPdfText.style.display = 'none';
+          renderPDFPage(currentPageNum);
+        });
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function renderPDFPage(num) {
+      if (!currentPdf) return;
+      currentPdf.getPage(num).then(page => {
+        const scaleQuality = parseFloat(qualitySelect.value);
+        const unscaledViewport = page.getViewport({ scale: 1.0 });
+        const maxContainerWidth = mainContainer.clientWidth - 24;
+        const displayWidth = Math.min(unscaledViewport.width * 1.2, maxContainerWidth);
+        const displayScale = displayWidth / unscaledViewport.width;
+        const viewportObj = page.getViewport({ scale: displayScale * scaleQuality });
+
+        mainCanvas.width = viewportObj.width;
+        mainCanvas.height = viewportObj.height;
+        offCanvas.width = mainCanvas.width;
+        offCanvas.height = mainCanvas.height;
+
+        workspace.style.width = `${displayWidth}px`;
+        workspace.style.height = `${unscaledViewport.height * displayScale}px`;
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        const renderContext = { canvasContext: ctx, viewport: viewportObj };
+        const renderTask = page.render(renderContext);
+
+        renderTask.promise.then(() => {
+          // 描画した原本ページをキャッシュに保持
+          offCtx.drawImage(mainCanvas, 0, 0);
+          applySheetEraser();
+        });
+
+        pageNumDisplay.textContent = `${num} / ${totalPages}`;
+      });
+    }
+
+    prevPageBtn.addEventListener('click', () => {
+      if (currentPageNum > 1) { currentPageNum--; renderPDFPage(currentPageNum); }
+    });
+    nextPageBtn.addEventListener('click', () => {
+      if (currentPageNum < totalPages) { currentPageNum++; renderPDFPage(currentPageNum); }
+    });
+
+    shapeSelect.addEventListener('change', (e) => {
+      const shape = e.target.value;
+      sheet.classList.remove('shape-circle', 'shape-free');
+
+      if (shape === 'circle' || shape === 'square') {
+        if (shape === 'circle') sheet.classList.add('shape-circle');
+        const currentSize = Math.min(sheet.clientWidth, sheet.clientHeight);
+        sheet.style.width = `${currentSize}px`;
+        sheet.style.height = `${currentSize}px`;
+      } else if (shape === 'free') {
+        sheet.classList.add('shape-free');
+      } else if (shape === 'marker') {
+        sheet.style.width = '180px';
+        sheet.style.height = '24px';
+      } else if (shape === 'rectangle') {
+        sheet.style.width = '200px';
+        sheet.style.height = '120px';
+      }
+      applySheetEraser();
+    });
+
+    lockSheetBtn.addEventListener('click', () => {
+      isSheetLocked = !isSheetLocked;
+      if (isSheetLocked) {
+        sheet.classList.add('is-locked');
+        lockSheetBtn.classList.add('locked');
+        lockBtnText.textContent = '固定中';
+        lockIcon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>';
+      } else {
+        sheet.classList.remove('is-locked');
+        lockSheetBtn.classList.remove('locked');
+        lockBtnText.textContent = '移動可能';
+        lockIcon.innerHTML = '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/>';
+      }
+    });
+
+    function updateSheetColor(colorHex) {
+      sheet.style.backgroundColor = colorHex;
+      customColor.value = colorHex;
+    }
+
+    colorPreset.addEventListener('change', (e) => updateSheetColor(e.target.value));
+    customColor.addEventListener('input', (e) => updateSheetColor(e.target.value));
+
+    toggleSheetBtn.addEventListener('click', () => {
+      const isHidden = sheet.style.display === 'none';
+      sheet.style.display = isHidden ? 'block' : 'none';
+      if (!isHidden) {
+        // 非表示にする時は元通り描画
+        ctx.drawImage(offCanvas, 0, 0);
+      } else {
+        applySheetEraser();
+      }
+    });
+
+    /* ---- 暗記シート移動・サイズ変更（同時に白塗り消去を発動） ---- */
+    let isDraggingSheet = false, isResizingSheet = false;
+    let sheetStartX, sheetStartY, sheetStartWidth, sheetStartHeight;
+
+    sheet.addEventListener('pointerdown', (e) => {
+      if (isSheetLocked) return;
+      e.stopPropagation();
+      const rect = sheet.getBoundingClientRect();
+      
+      if (e.clientX > rect.right - 28 && e.clientY > rect.bottom - 28) {
+        isResizingSheet = true;
+        sheetStartX = e.clientX;
+        sheetStartY = e.clientY;
+        sheetStartWidth = rect.width;
+        sheetStartHeight = rect.height;
+      } else {
+        isDraggingSheet = true;
+        sheetStartX = e.clientX - sheet.offsetLeft * scale;
+        sheetStartY = e.clientY - sheet.offsetTop * scale;
+      }
+      sheet.setPointerCapture(e.pointerId);
+    });
+
+    sheet.addEventListener('pointermove', (e) => {
+      if (isSheetLocked) return;
+      if (isDraggingSheet) {
+        let left = (e.clientX - sheetStartX) / scale;
+        let top = (e.clientY - sheetStartY) / scale;
+        left = Math.max(0, Math.min(left, workspace.clientWidth - sheet.clientWidth));
+        top = Math.max(0, Math.min(top, workspace.clientHeight - sheet.clientHeight));
+        sheet.style.left = `${left}px`;
+        sheet.style.top = `${top}px`;
+        applySheetEraser();
+      } else if (isResizingSheet) {
+        let width = (sheetStartWidth + (e.clientX - sheetStartX)) / scale;
+        let height = (sheetStartHeight + (e.clientY - sheetStartY)) / scale;
+
+        if (shapeSelect.value === 'square' || shapeSelect.value === 'circle') {
+          const side = Math.max(40, Math.min(width, height));
+          width = side;
+          height = side;
+        }
+
+        sheet.style.width = `${Math.max(40, width)}px`;
+        sheet.style.height = `${Math.max(20, height)}px`;
+        applySheetEraser();
+      }
+    });
+
+    sheet.addEventListener('pointerup', (e) => {
+      if (isSheetLocked) return;
+      isDraggingSheet = false;
+      isResizingSheet = false;
+      sheet.releasePointerCapture(e.pointerId);
+      applySheetEraser();
+    });
+
+    /* ---- ズーム・パン処理 ---- */
+    let activePointers = [];
+    let initialPinchDistance = 0;
+    let initialScale = 1;
+    let initialPanX = 0, initialPanY = 0;
+    let pinchCenter = { x: 0, y: 0 };
+    let panStartX = 0, panStartY = 0;
+
+    mainContainer.addEventListener('pointerdown', (e) => {
+      if (e.target === sheet || sheet.contains(e.target)) return;
+      activePointers.push(e);
+
+      if (activePointers.length === 1) {
+        panStartX = e.clientX - panX;
+        panStartY = e.clientY - panY;
+      } else if (activePointers.length === 2) {
+        initialPinchDistance = getDistance(activePointers[0], activePointers[1]);
+        initialScale = scale;
+        initialPanX = panX;
+        initialPanY = panY;
+
+        const rect = mainContainer.getBoundingClientRect();
+        pinchCenter = {
+          x: (activePointers[0].clientX + activePointers[1].clientX) / 2 - rect.left - rect.width / 2,
+          y: (activePointers[0].clientY + activePointers[1].clientY) / 2 - rect.top - rect.height / 2
+        };
+      }
+    });
+
+    mainContainer.addEventListener('pointermove', (e) => {
+      const index = activePointers.findIndex(p => p.pointerId === e.pointerId);
+      if (index !== -1) activePointers[index] = e;
+
+      if (activePointers.length === 1 && !isDraggingSheet && !isResizingSheet) {
+        panX = e.clientX - panStartX;
+        panY = e.clientY - panStartY;
+        updateTransform();
+      } else if (activePointers.length === 2) {
+        const currentDist = getDistance(activePointers[0], activePointers[1]);
+        if (initialPinchDistance > 0) {
+          const factor = currentDist / initialPinchDistance;
+          const newScale = Math.min(Math.max(0.5, initialScale * factor), 5);
+
+          const scaleRatio = newScale / initialScale;
+          panX = pinchCenter.x - (pinchCenter.x - initialPanX) * scaleRatio;
+          panY = pinchCenter.y - (pinchCenter.y - initialPanY) * scaleRatio;
+          scale = newScale;
+
+          updateTransform();
+        }
+      }
+    });
+
+    function handlePointerEnd(e) {
+      activePointers = activePointers.filter(p => p.pointerId !== e.pointerId);
+      if (activePointers.length < 2) {
+        initialPinchDistance = 0;
+      }
+      if (activePointers.length === 1) {
+        panStartX = activePointers[0].clientX - panX;
+        panStartY = activePointers[0].clientY - panY;
+      }
+    }
+
+    mainContainer.addEventListener('pointerup', handlePointerEnd);
+    mainContainer.addEventListener('pointercancel', handlePointerEnd);
+
+    function getDistance(p1, p2) {
+      const dx = p1.clientX - p2.clientX;
+      const dy = p1.clientY - p2.clientY;
+      return Math.hypot(dx, dy);
+    }
+  </script>
+</body>
+</html>
